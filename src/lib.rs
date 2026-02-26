@@ -2,6 +2,7 @@ use serialport::SerialPort;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -60,11 +61,13 @@ pub enum ActiveConnection {
         cmd_tx: std::sync::mpsc::Sender<String>,
         pending_bytes: Arc<Mutex<usize>>,
         pending_lens: Arc<Mutex<VecDeque<usize>>>,
+        reset_signal: Arc<AtomicBool>,
     },
     Telnet {
         _stream: TcpStream,
         rt_stream: Arc<Mutex<TcpStream>>,
         cmd_tx: std::sync::mpsc::Sender<String>,
+        reset_signal: Arc<AtomicBool>,
     },
 }
 
@@ -156,21 +159,55 @@ impl FluidNCDriver {
         pending_lens: Arc<Mutex<VecDeque<usize>>>,
         status: Arc<Mutex<ConnectionStatus>>,
         observer: Arc<dyn DriverEventObserver>,
+        reset_signal: Arc<AtomicBool>,
     ) {
         thread::spawn(move || {
-            'outer: for cmd in rx {
+            loop {
+                // Block waiting for the next command
+                let cmd = match rx.recv() {
+                    Ok(cmd) => cmd,
+                    Err(_) => break, // channel closed
+                };
+
+                // Check if a soft reset was signaled — drain all queued commands
+                if reset_signal.load(Ordering::Relaxed) {
+                    let mut drained = 1; // count the current cmd
+                    while rx.try_recv().is_ok() {
+                        drained += 1;
+                    }
+                    reset_signal.store(false, Ordering::Relaxed);
+                    observer.emit(&format!(
+                        "[GTaurus] Writer: Drained {} queued command(s) after soft reset",
+                        drained
+                    ));
+                    // Brief pause for FluidNC to finish rebooting
+                    thread::sleep(Duration::from_millis(500));
+                    continue;
+                }
+
                 let cmd_len = cmd.len() + 1;
                 loop {
                     if let Ok(s) = status.lock() {
                         if matches!(*s, ConnectionStatus::Disconnected) {
-                            break 'outer;
+                            return; // exit thread
                         }
+                    }
+                    // Also break out of buffer-wait if reset was signaled
+                    if reset_signal.load(Ordering::Relaxed) {
+                        break;
                     }
                     if *pending_bytes.lock().unwrap() + cmd_len < MAX_BUFFER_SIZE {
                         break;
                     }
                     thread::sleep(Duration::from_millis(1));
                 }
+
+                // Final check before writing — if reset was signaled while waiting,
+                // loop back and let the drain logic at the top handle it
+                if reset_signal.load(Ordering::Relaxed) {
+                    continue;
+                }
+
                 let full_cmd = format!("{}\n", cmd);
                 {
                     let mut bytes = pending_bytes.lock().unwrap();
@@ -244,9 +281,30 @@ impl FluidNCDriver {
         rx: std::sync::mpsc::Receiver<String>,
         status: Arc<Mutex<ConnectionStatus>>,
         observer: Arc<dyn DriverEventObserver>,
+        reset_signal: Arc<AtomicBool>,
     ) {
         thread::spawn(move || {
-            for cmd in rx {
+            loop {
+                let cmd = match rx.recv() {
+                    Ok(cmd) => cmd,
+                    Err(_) => break,
+                };
+
+                // Check if a soft reset was signaled — drain all queued commands
+                if reset_signal.load(Ordering::Relaxed) {
+                    let mut drained = 1;
+                    while rx.try_recv().is_ok() {
+                        drained += 1;
+                    }
+                    reset_signal.store(false, Ordering::Relaxed);
+                    observer.emit(&format!(
+                        "[GTaurus] Writer: Drained {} queued command(s) after soft reset",
+                        drained
+                    ));
+                    thread::sleep(Duration::from_millis(500));
+                    continue;
+                }
+
                 let mut s = stream.lock().unwrap();
                 let full_cmd = format!("{}\n", cmd);
                 if s.write_all(full_cmd.as_bytes()).is_err() || s.flush().is_err() {
@@ -304,6 +362,7 @@ impl GCodeConnection for FluidNCDriver {
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
         let pending_bytes = Arc::new(Mutex::new(0usize));
         let pending_lens = Arc::new(Mutex::new(VecDeque::<usize>::new()));
+        let reset_signal = Arc::new(AtomicBool::new(false));
 
         // IMPORTANT: Set status BEFORE spawning threads. Both the reader and
         // writer threads check the status on timeout/startup and will exit
@@ -330,6 +389,7 @@ impl GCodeConnection for FluidNCDriver {
             pending_lens.clone(),
             self.status.clone(),
             self.observer.clone(),
+            reset_signal.clone(),
         );
 
         self.conn = ActiveConnection::Serial {
@@ -338,6 +398,7 @@ impl GCodeConnection for FluidNCDriver {
             cmd_tx,
             pending_bytes,
             pending_lens,
+            reset_signal,
         };
         Ok(())
     }
@@ -356,6 +417,7 @@ impl GCodeConnection for FluidNCDriver {
         let rt_stream = writer_arc.clone();
 
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
+        let reset_signal = Arc::new(AtomicBool::new(false));
 
         // Set status BEFORE spawning threads to prevent the same race
         // condition as in connect_serial (threads exit if they see Disconnected).
@@ -372,12 +434,14 @@ impl GCodeConnection for FluidNCDriver {
             cmd_rx,
             self.status.clone(),
             self.observer.clone(),
+            reset_signal.clone(),
         );
 
         self.conn = ActiveConnection::Telnet {
             _stream: stream,
             rt_stream,
             cmd_tx,
+            reset_signal,
         };
         Ok(())
     }
@@ -402,6 +466,7 @@ impl GCodeConnection for FluidNCDriver {
                 rt_port,
                 pending_bytes,
                 pending_lens,
+                reset_signal,
                 ..
             } => {
                 {
@@ -410,19 +475,34 @@ impl GCodeConnection for FluidNCDriver {
                     p.flush().map_err(|e| e.to_string())?;
                 }
 
-                // If soft reset (Ctrl-X / 0x18), clear any pending local buffer state
+                // If soft reset (Ctrl-X / 0x18), clear pending buffer state and
+                // signal the writer thread to drain its command queue
                 if byte == 0x18 {
                     *pending_bytes.lock().unwrap() = 0;
                     pending_lens.lock().unwrap().clear();
-                    self.observer
-                        .emit("[GTaurus] Soft Reset (0x18) - Local buffer cleared");
+                    reset_signal.store(true, Ordering::Relaxed);
+                    self.observer.emit(
+                        "[GTaurus] Soft Reset (0x18) - Local buffer cleared, writer drain signaled",
+                    );
                 }
                 Ok(())
             }
-            ActiveConnection::Telnet { rt_stream, .. } => {
+            ActiveConnection::Telnet {
+                rt_stream,
+                reset_signal,
+                ..
+            } => {
                 let mut s = rt_stream.lock().map_err(|_| "Poisoned".to_string())?;
                 s.write_all(&[byte]).map_err(|e| e.to_string())?;
-                s.flush().map_err(|e| e.to_string())
+                s.flush().map_err(|e| e.to_string())?;
+
+                // Signal writer thread to drain on soft reset
+                if byte == 0x18 {
+                    reset_signal.store(true, Ordering::Relaxed);
+                    self.observer
+                        .emit("[GTaurus] Soft Reset (0x18) - Writer drain signaled");
+                }
+                Ok(())
             }
             ActiveConnection::None => Err("Not connected".to_string()),
         }
