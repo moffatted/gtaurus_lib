@@ -1,6 +1,6 @@
 use serialport::SerialPort;
 use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -264,10 +264,37 @@ impl FluidNCDriver {
 impl GCodeConnection for FluidNCDriver {
     fn connect_serial(&mut self, port_name: &str, baud_rate: u32) -> Result<(), String> {
         self.disconnect();
+
+        // Brief pause to let the OS fully release the port from any prior connection
+        thread::sleep(Duration::from_millis(100));
+
         let port = serialport::new(port_name, baud_rate)
             .timeout(Duration::from_millis(100))
             .open()
             .map_err(|e| e.to_string())?;
+
+        // Drain any stale data sitting in the OS serial buffer from a previous
+        // session or from the controller's boot output after a power cycle.
+        {
+            let mut drain_port = port.try_clone().map_err(|e| e.to_string())?;
+            let mut drain_buf = [0u8; 512];
+            loop {
+                match drain_port.read(&mut drain_buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        self.observer.emit(&format!(
+                            "[GTaurus] Drained {} stale bytes from serial buffer",
+                            n
+                        ));
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => break,
+                    Err(_) => break,
+                }
+            }
+        }
+
+        // Let the controller stabilize after the port is opened
+        thread::sleep(Duration::from_millis(150));
 
         let reader_clone = SerialWrapper(port.try_clone().map_err(|e| e.to_string())?);
         let writer_clone = SerialWrapper(port.try_clone().map_err(|e| e.to_string())?);
