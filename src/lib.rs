@@ -305,6 +305,14 @@ impl GCodeConnection for FluidNCDriver {
         let pending_bytes = Arc::new(Mutex::new(0usize));
         let pending_lens = Arc::new(Mutex::new(VecDeque::<usize>::new()));
 
+        // IMPORTANT: Set status BEFORE spawning threads. Both the reader and
+        // writer threads check the status on timeout/startup and will exit
+        // immediately if they see Disconnected — a race condition that caused
+        // reconnection failures after power-cycling the controller.
+        if let Ok(mut s) = self.status.lock() {
+            *s = ConnectionStatus::Serial(port_name.to_string());
+        }
+
         self.observer
             .emit(&format!("[GTaurus] Connected via Serial: {}", port_name));
 
@@ -324,9 +332,6 @@ impl GCodeConnection for FluidNCDriver {
             self.observer.clone(),
         );
 
-        if let Ok(mut s) = self.status.lock() {
-            *s = ConnectionStatus::Serial(port_name.to_string());
-        }
         self.conn = ActiveConnection::Serial {
             _port: SerialWrapper(port),
             rt_port,
@@ -352,6 +357,12 @@ impl GCodeConnection for FluidNCDriver {
 
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
 
+        // Set status BEFORE spawning threads to prevent the same race
+        // condition as in connect_serial (threads exit if they see Disconnected).
+        if let Ok(mut s) = self.status.lock() {
+            *s = ConnectionStatus::Telnet(addr.clone());
+        }
+
         self.observer
             .emit(&format!("[GTaurus] Connected via Telnet: {addr}"));
 
@@ -363,9 +374,6 @@ impl GCodeConnection for FluidNCDriver {
             self.observer.clone(),
         );
 
-        if let Ok(mut s) = self.status.lock() {
-            *s = ConnectionStatus::Telnet(addr);
-        }
         self.conn = ActiveConnection::Telnet {
             _stream: stream,
             rt_stream,
