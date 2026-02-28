@@ -1,3 +1,7 @@
+/**
+ * @file lib.rs
+ * @purpose Core communication library for FluidNC, providing Serial and Telnet transport implementations with local buffering and real-time command support.
+ */
 use serialport::SerialPort;
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
