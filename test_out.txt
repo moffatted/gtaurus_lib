@@ -1,0 +1,33 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests\test_serial.rs (target\debug\deps\test_serial-8f6d9c4c280b6522.exe)
+
+running 11 tests
+test dummy_serial_test ... ok
+test test_auto_connect_suspend ... ok
+test test_connection_status_display ... ok
+test test_writer_disconnect_exit ... ok
+test test_spawn_serial_writer ... ok
+test test_spawn_serial_reader ... ok
+test test_simulated_serial_connection ... ok
+test test_connect_serial_failure ... ok
+test test_spawn_serial_writer_soft_reset ... ok
+
+thread 'test_tcp_reader_writer' (28552) panicked at tests\test_serial.rs:474:5:
+assertion `left == right` failed
+  left: Telnet("127.0.0.1:53999")
+ right: Disconnected
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread '<unnamed>' (26600) panicked at tests\test_serial.rs:21:30:
+called `Result::unwrap()` on an `Err` value: PoisonError { .. }
+test test_tcp_reader_writer ... FAILED
+test test_connect_telnet_failure ... ok
+
+failures:
+
+failures:
+    test_tcp_reader_writer
+
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.04s
+
+error: test failed, to rerun pass `--test test_serial`

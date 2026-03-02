@@ -95,7 +95,7 @@ impl FluidNCDriver {
         }
     }
 
-    fn spawn_serial_reader(
+    pub fn spawn_serial_reader(
         reader_port: SerialWrapper,
         pending_bytes: Arc<Mutex<usize>>,
         pending_lens: Arc<Mutex<VecDeque<usize>>>,
@@ -156,7 +156,7 @@ impl FluidNCDriver {
         });
     }
 
-    fn spawn_serial_writer(
+    pub fn spawn_serial_writer(
         mut writer_port: SerialWrapper,
         rx: std::sync::mpsc::Receiver<String>,
         pending_bytes: Arc<Mutex<usize>>,
@@ -236,7 +236,7 @@ impl FluidNCDriver {
         });
     }
 
-    fn spawn_tcp_reader(
+    pub fn spawn_tcp_reader(
         stream: TcpStream,
         observer: Arc<dyn DriverEventObserver>,
         status: Arc<Mutex<ConnectionStatus>>,
@@ -280,7 +280,7 @@ impl FluidNCDriver {
         });
     }
 
-    fn spawn_tcp_writer(
+    pub fn spawn_tcp_writer(
         stream: Arc<Mutex<TcpStream>>,
         rx: std::sync::mpsc::Receiver<String>,
         status: Arc<Mutex<ConnectionStatus>>,
@@ -539,5 +539,95 @@ impl GCodeConnection for FluidNCDriver {
 
     fn is_auto_connect_suspended(&self) -> bool {
         self.auto_connect_suspended
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+
+    struct MockObserver {
+        messages: Mutex<Vec<String>>,
+    }
+
+    impl MockObserver {
+        fn new() -> Self {
+            Self {
+                messages: Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl DriverEventObserver for MockObserver {
+        fn emit(&self, line: &str) {
+            self.messages.lock().unwrap().push(line.to_string());
+        }
+    }
+
+    #[test]
+    fn test_connection_status_display() {
+        assert_eq!(ConnectionStatus::Disconnected.to_string(), "Disconnected");
+        assert_eq!(
+            ConnectionStatus::Serial("COM3".to_string()).to_string(),
+            "Serial: COM3"
+        );
+        assert_eq!(
+            ConnectionStatus::Telnet("192.168.1.100:23".to_string()).to_string(),
+            "WiFi: 192.168.1.100:23"
+        );
+    }
+
+    #[test]
+    fn test_fluidnc_driver_initialization() {
+        let observer = Arc::new(MockObserver::new());
+        let driver = FluidNCDriver::new(observer);
+
+        assert_eq!(driver.get_status(), "Disconnected");
+        assert!(!driver.is_auto_connect_suspended());
+        let status = driver.status.lock().unwrap();
+        assert_eq!(*status, ConnectionStatus::Disconnected);
+    }
+
+    #[test]
+    fn test_fluidnc_driver_suspend_auto_connect() {
+        let observer = Arc::new(MockObserver::new());
+        let mut driver = FluidNCDriver::new(observer);
+
+        driver.set_auto_connect_suspended(true);
+        assert!(driver.is_auto_connect_suspended());
+
+        driver.set_auto_connect_suspended(false);
+        assert!(!driver.is_auto_connect_suspended());
+    }
+
+    #[test]
+    fn test_send_command_disconnected() {
+        let observer = Arc::new(MockObserver::new());
+        let mut driver = FluidNCDriver::new(observer);
+
+        let result = driver.send_command("G0 X10".to_string());
+        assert_eq!(result.unwrap_err(), "Not connected");
+    }
+
+    #[test]
+    fn test_send_realtime_disconnected() {
+        let observer = Arc::new(MockObserver::new());
+        let mut driver = FluidNCDriver::new(observer);
+
+        let result = driver.send_realtime(0x85); // Jog Cancel
+        assert_eq!(result.unwrap_err(), "Not connected");
+    }
+
+    #[test]
+    fn test_add_rx_subscriber() {
+        let observer = Arc::new(MockObserver::new());
+        let mut driver = FluidNCDriver::new(observer);
+
+        let (tx, _rx) = mpsc::channel();
+        driver.add_rx_subscriber(tx);
+
+        let subs = driver.subscribers.lock().unwrap();
+        assert_eq!(subs.len(), 1);
     }
 }
