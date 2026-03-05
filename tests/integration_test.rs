@@ -62,13 +62,13 @@ fn test_tcp_connection_and_communication() {
     // Test Realtime byte (e.g. Pause 0x21)
     driver.send_realtime(0x21).unwrap();
     thread::sleep(Duration::from_millis(50));
-    let n = socket.read(&mut buf).unwrap();
+    let _n = socket.read(&mut buf).unwrap();
     assert_eq!(&buf[..1], &[0x21]);
 
     // Test Soft Reset (0x18)
     driver.send_realtime(0x18).unwrap();
     thread::sleep(Duration::from_millis(50));
-    let n = socket.read(&mut buf).unwrap();
+    let _n = socket.read(&mut buf).unwrap();
     assert_eq!(&buf[..1], &[0x18]);
 
     // Ensure observer emitted soft reset log
