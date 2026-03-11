@@ -1,4 +1,4 @@
-/**
+/*
  * @file lib.rs
  * @purpose Core communication library for FluidNC, providing Serial and Telnet transport implementations with local buffering and real-time command support.
  */
