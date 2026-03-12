@@ -1,3 +1,8 @@
+/*
+ * @file integration_test.rs
+ * @purpose Integration tests for the full communication stack, using mock servers to verify data flow.
+ * @author Ed Moffatt
+ */
 use gtaurus_common::*;
 use std::io::{Read, Write};
 use std::net::TcpListener;

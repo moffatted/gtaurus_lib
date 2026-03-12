@@ -1,3 +1,8 @@
+/*
+ * @file tests.rs
+ * @purpose Unit tests for the FluidNCDriver and associated communication logic.
+ * @author Ed Moffatt
+ */
 #[cfg(test)]
 mod tests {
     use crate::types::*;

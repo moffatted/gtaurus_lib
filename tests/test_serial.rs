@@ -1,3 +1,8 @@
+/*
+ * @file test_serial.rs
+ * @purpose Integration tests for serial communication, simulating port interactions and driver events.
+ * @author Ed Moffatt
+ */
 use gtaurus_common::*;
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::io::{self, Read, Write};

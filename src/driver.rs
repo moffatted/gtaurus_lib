@@ -1,3 +1,8 @@
+/*
+ * @file driver.rs
+ * @purpose Core FluidNC driver implementation managing communication threads and event distribution.
+ * @author Ed Moffatt
+ */
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;

@@ -1,3 +1,8 @@
+/*
+ * @file types.rs
+ * @purpose Shared data types and constants used across the gtaurus_lib communication library.
+ * @author Ed Moffatt
+ */
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 use std::net::TcpStream;
