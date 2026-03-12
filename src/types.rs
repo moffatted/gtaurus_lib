@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicBool;
 use serialport::SerialPort;
 
 pub const MAX_BUFFER_SIZE: usize = 127;
+pub const RX_EVENT: &str = "rx_event";
 
 pub struct SerialWrapper(pub Box<dyn SerialPort>);
 unsafe impl Send for SerialWrapper {}
