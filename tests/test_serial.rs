@@ -167,7 +167,7 @@ fn test_simulated_serial_connection() {
         *s = ConnectionStatus::Serial("DUMMY".to_string());
     }
 
-    FluidNCDriver::spawn_serial_writer(
+    transport::serial::spawn_serial_writer(
         writer_clone,
         cmd_rx,
         pending_bytes.clone(),
@@ -257,7 +257,7 @@ fn test_spawn_serial_reader() {
     let reader_wrapper = SerialWrapper(Box::new(port));
 
     // Spawn the reader
-    FluidNCDriver::spawn_serial_reader(
+    transport::serial::spawn_serial_reader(
         reader_wrapper,
         pending_bytes,
         pending_lens.clone(),
@@ -294,7 +294,7 @@ fn test_spawn_serial_writer() {
 
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
 
-    FluidNCDriver::spawn_serial_writer(
+    transport::serial::spawn_serial_writer(
         writer_wrapper,
         cmd_rx,
         pending_bytes.clone(),
@@ -333,7 +333,7 @@ fn test_spawn_serial_writer_soft_reset() {
 
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
 
-    FluidNCDriver::spawn_serial_writer(
+    transport::serial::spawn_serial_writer(
         writer_wrapper,
         cmd_rx,
         pending_bytes.clone(),
@@ -372,7 +372,7 @@ fn test_writer_disconnect_exit() {
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
 
     // This should immediately return because status is "Disconnected"
-    FluidNCDriver::spawn_serial_writer(
+    transport::serial::spawn_serial_writer(
         writer_wrapper,
         cmd_rx,
         pending_bytes.clone(),
@@ -430,7 +430,7 @@ fn test_tcp_reader_writer() {
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
 
     // Spawn Writer
-    FluidNCDriver::spawn_tcp_writer(
+    transport::tcp::spawn_tcp_writer(
         Arc::new(Mutex::new(client_stream)),
         cmd_rx,
         status.clone(),
@@ -439,7 +439,7 @@ fn test_tcp_reader_writer() {
     );
 
     // Spawn Reader
-    FluidNCDriver::spawn_tcp_reader(reader_stream, observer.clone(), status.clone());
+    transport::tcp::spawn_tcp_reader(reader_stream, observer.clone(), status.clone());
 
     // Test sending command
     cmd_tx.send("G0 X10".to_string()).unwrap();
@@ -495,7 +495,7 @@ fn test_tcp_writer_soft_reset() {
 
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
 
-    FluidNCDriver::spawn_tcp_writer(
+    transport::tcp::spawn_tcp_writer(
         Arc::new(Mutex::new(client_stream)),
         cmd_rx,
         status.clone(),
@@ -539,7 +539,7 @@ fn test_tcp_error_handling() {
 
     let (cmd_tx, cmd_rx) = std::sync::mpsc::channel::<String>();
 
-    FluidNCDriver::spawn_tcp_writer(
+    transport::tcp::spawn_tcp_writer(
         Arc::new(Mutex::new(writer_stream)),
         cmd_rx,
         status.clone(),
@@ -547,7 +547,7 @@ fn test_tcp_error_handling() {
         reset_signal.clone(),
     );
 
-    FluidNCDriver::spawn_tcp_reader(reader_stream, observer.clone(), status.clone());
+    transport::tcp::spawn_tcp_reader(reader_stream, observer.clone(), status.clone());
 
     // Sleep so the reader thread hits the TimedOut logic a few times
     std::thread::sleep(Duration::from_millis(50));
