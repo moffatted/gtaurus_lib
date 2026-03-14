@@ -63,6 +63,25 @@ The focus is reusable, stable, testable protocol and transport abstractions.
 - Document protocol assumptions and transport limitations.
 - Keep README usage examples aligned with current APIs.
 
+### 9. Source Control and GitHub Workflow
+
+- Keep public API changes isolated in focused pull requests.
+- Include semver impact notes for any public contract changes.
+- Require changelog entries for behavioral or API-impacting updates.
+- Request review from maintainers owning transport and type boundaries.
+- Require CI to run unit, integration, and lint checks before merge.
+- Add migration guidance in pull requests when deprecating APIs.
+
+### 10. T3 + Tauri + Rust Library Testing Practices
+
+- Validate library behavior with tests that mirror real app command sequences.
+- Keep protocol parser tests table-driven with edge-case coverage.
+- Add contract tests to ensure stable behavior for frontend expectations.
+- Use transport conformance tests shared across serial and tcp implementations.
+- Include fuzz-like malformed frame tests for parser hardening.
+- Verify timeout and retry semantics with deterministic fake clocks where possible.
+- Add regression tests for every API or protocol bug fixed in production.
+
 ## Coding Standards
 
 - Prefer explicit names over short abbreviations.
