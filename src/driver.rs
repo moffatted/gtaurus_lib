@@ -4,16 +4,17 @@
  * @author Ed Moffatt
  */
 use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::Duration;
 use std::collections::VecDeque;
 use std::net::TcpStream;
 use serialport::SerialPort;
-use std::io::Write;
 
 use crate::types::{ActiveConnection, ConnectionStatus, DriverEventObserver, SerialWrapper};
 use crate::traits::GCodeConnection;
+use crate::transport::command::send_queued_command;
+use crate::transport::realtime::{send_serial_realtime, send_telnet_realtime};
 use crate::transport::serial::{spawn_serial_reader, spawn_serial_writer};
 use crate::transport::tcp::{spawn_tcp_reader, spawn_tcp_writer};
 
@@ -129,11 +130,7 @@ impl GCodeConnection for FluidNCDriver {
         if self.get_status() == "Disconnected" {
             return Err("Not connected".to_string());
         }
-        match &self.conn {
-            ActiveConnection::Serial { cmd_tx, .. } => cmd_tx.send(cmd).map_err(|e| e.to_string()),
-            ActiveConnection::Telnet { cmd_tx, .. } => cmd_tx.send(cmd).map_err(|e| e.to_string()),
-            ActiveConnection::None => Err("Not connected".to_string()),
-        }
+        send_queued_command(&self.conn, cmd)
     }
 
     fn send_realtime(&mut self, byte: u8) -> Result<(), String> {
@@ -142,28 +139,17 @@ impl GCodeConnection for FluidNCDriver {
         }
         match &self.conn {
             ActiveConnection::Serial { rt_port, pending_bytes, pending_lens, reset_signal, .. } => {
-                {
-                    let mut p = rt_port.lock().map_err(|_| "Poisoned".to_string())?;
-                    p.write_all(&[byte]).map_err(|e| e.to_string())?;
-                    p.flush().map_err(|e| e.to_string())?;
-                }
-                if byte == 0x18 {
-                    *pending_bytes.lock().unwrap() = 0;
-                    pending_lens.lock().unwrap().clear();
-                    reset_signal.store(true, Ordering::Relaxed);
-                    self.observer.emit("[GTaurus] Soft Reset (0x18) - Local buffer cleared, writer drain signaled");
-                }
-                Ok(())
+                send_serial_realtime(
+                    rt_port,
+                    pending_bytes,
+                    pending_lens,
+                    reset_signal,
+                    &self.observer,
+                    byte,
+                )
             }
             ActiveConnection::Telnet { rt_stream, reset_signal, .. } => {
-                let mut s = rt_stream.lock().map_err(|_| "Poisoned".to_string())?;
-                s.write_all(&[byte]).map_err(|e| e.to_string())?;
-                s.flush().map_err(|e| e.to_string())?;
-                if byte == 0x18 {
-                    reset_signal.store(true, Ordering::Relaxed);
-                    self.observer.emit("[GTaurus] Soft Reset (0x18) - Writer drain signaled");
-                }
-                Ok(())
+                send_telnet_realtime(rt_stream, reset_signal, &self.observer, byte)
             }
             ActiveConnection::None => Err("Not connected".to_string()),
         }
