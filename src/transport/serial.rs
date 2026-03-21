@@ -1,8 +1,4 @@
-/*
- * @file serial.rs
- * @purpose Back-end threads for serial port reading and writing with character-counting flow control.
- * @author Ed Moffatt
- */
+//! Serial transport workers with character-counting flow control.
 use std::io::{BufRead, BufReader, Write};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,6 +7,19 @@ use std::time::Duration;
 use std::collections::VecDeque;
 use crate::types::{SerialWrapper, ConnectionStatus, DriverEventObserver, MAX_BUFFER_SIZE};
 
+/// Spawn the serial reader thread.
+///
+/// Emits received lines to the observer and releases pending buffer budget on
+/// `ok`/`error:` responses.
+///
+/// # Errors
+///
+/// This function does not return errors directly; read errors are handled inside
+/// the worker by transitioning connection state to `Disconnected`.
+///
+/// # Panics
+///
+/// May panic if any internal mutex is poisoned when calling `.unwrap()`.
 pub fn spawn_serial_reader(
     reader_port: SerialWrapper,
     pending_bytes: Arc<Mutex<usize>>,
@@ -72,6 +81,19 @@ pub fn spawn_serial_reader(
     });
 }
 
+/// Spawn the serial writer thread.
+///
+/// Pulls queued commands, waits for available buffer budget, and writes commands
+/// with trailing newline.
+///
+/// # Errors
+///
+/// This function does not return errors directly; write/channel failures are
+/// handled inside the worker loop.
+///
+/// # Panics
+///
+/// May panic if any internal mutex is poisoned when calling `.unwrap()`.
 pub fn spawn_serial_writer(
     mut writer_port: SerialWrapper,
     rx: std::sync::mpsc::Receiver<String>,

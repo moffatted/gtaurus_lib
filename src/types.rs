@@ -1,21 +1,24 @@
-/*
- * @file types.rs
- * @purpose Shared data types and constants used across the gtaurus_lib communication library.
- * @author Ed Moffatt
- */
+//! Shared types and constants for transport and driver layers.
+
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
 use std::net::TcpStream;
 use std::sync::atomic::AtomicBool;
 use serialport::SerialPort;
 
+/// Maximum sender-side character budget used for serial flow control.
 pub const MAX_BUFFER_SIZE: usize = 127;
+/// Event name used by consumers for RX line notifications.
 pub const RX_EVENT: &str = "rx_event";
 
+/// Wrapper for serial port trait objects used in connection state.
 pub struct SerialWrapper(pub Box<dyn SerialPort>);
+/// # Safety
+/// `SerialWrapper` is shared only behind synchronization primitives.
 unsafe impl Send for SerialWrapper {}
 
 #[derive(Clone, Debug, PartialEq)]
+/// Connection state for the active machine link.
 pub enum ConnectionStatus {
     Disconnected,
     Serial(String), // port name
@@ -32,10 +35,13 @@ impl std::fmt::Display for ConnectionStatus {
     }
 }
 
+/// Observer callback for driver-emitted text lines.
 pub trait DriverEventObserver: Send + Sync {
+    /// Emit an informational or machine output line.
     fn emit(&self, line: &str);
 }
 
+/// Internal active transport state and associated channels/resources.
 pub enum ActiveConnection {
     None,
     Serial {

@@ -1,8 +1,4 @@
-/*
- * @file tcp.rs
- * @purpose Back-end threads for Telnet (TCP) machine communication.
- * @author Ed Moffatt
- */
+//! Telnet/TCP transport workers for machine communication.
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::sync::{Arc, Mutex};
@@ -11,6 +7,12 @@ use std::thread;
 use std::time::Duration;
 use crate::types::{ConnectionStatus, DriverEventObserver};
 
+/// Spawn the TCP reader thread and forward inbound lines to the observer.
+///
+/// # Errors
+///
+/// This function does not return errors directly; socket read errors are handled
+/// inside the worker by setting connection state to `Disconnected`.
 pub fn spawn_tcp_reader(
     stream: TcpStream,
     observer: Arc<dyn DriverEventObserver>,
@@ -55,6 +57,16 @@ pub fn spawn_tcp_reader(
     });
 }
 
+/// Spawn the TCP writer thread and send queued commands over the socket.
+///
+/// # Errors
+///
+/// This function does not return errors directly; socket write/channel failures
+/// are handled in the worker loop.
+///
+/// # Panics
+///
+/// May panic if the stream mutex is poisoned when acquiring the lock.
 pub fn spawn_tcp_writer(
     stream: Arc<Mutex<TcpStream>>,
     rx: std::sync::mpsc::Receiver<String>,

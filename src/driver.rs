@@ -1,8 +1,4 @@
-/*
- * @file driver.rs
- * @purpose Core FluidNC driver implementation managing communication threads and event distribution.
- * @author Ed Moffatt
- */
+//! FluidNC driver implementation that wires transport workers and state.
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
 use std::thread;
@@ -18,6 +14,7 @@ use crate::transport::realtime::{send_serial_realtime, send_telnet_realtime};
 use crate::transport::serial::{spawn_serial_reader, spawn_serial_writer};
 use crate::transport::tcp::{spawn_tcp_reader, spawn_tcp_writer};
 
+/// Main driver type implementing [`crate::traits::GCodeConnection`].
 pub struct FluidNCDriver {
     pub conn: ActiveConnection,
     pub status: Arc<Mutex<ConnectionStatus>>,
@@ -27,6 +24,7 @@ pub struct FluidNCDriver {
 }
 
 impl FluidNCDriver {
+    /// Construct a disconnected driver instance with the given observer.
     pub fn new(observer: Arc<dyn DriverEventObserver>) -> Self {
         Self {
             conn: ActiveConnection::None,
