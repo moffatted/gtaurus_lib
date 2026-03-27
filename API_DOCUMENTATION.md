@@ -2,7 +2,8 @@
 
 ## Scope
 
-This document reflects the current public API in `gtaurus_common` (workspace folder `gtaurus_lib`).
+This document reflects the current public API in `gtaurus_common`
+(workspace folder `gtaurus_lib`).
 
 ## Public Modules
 
@@ -17,7 +18,11 @@ Defined in `src/traits.rs`.
 
 ```rust
 pub trait GCodeConnection: Send {
-    fn connect_serial(&mut self, port_name: &str, baud_rate: u32) -> Result<(), String>;
+    fn connect_serial(
+        &mut self,
+        port_name: &str,
+        baud_rate: u32,
+    ) -> Result<(), String>;
     fn connect_telnet(&mut self, host: &str, port: u16) -> Result<(), String>;
     fn send_command(&mut self, cmd: String) -> Result<(), String>;
     fn send_realtime(&mut self, byte: u8) -> Result<(), String>;
@@ -57,6 +62,7 @@ fn main() -> Result<(), String> {
 `FluidNCDriver` is defined in `src/driver.rs` and implements `GCodeConnection`.
 
 Important fields (public):
+
 - `conn: ActiveConnection`
 - `status: Arc<Mutex<ConnectionStatus>>`
 - `observer: Arc<dyn DriverEventObserver>`
@@ -80,17 +86,21 @@ Defined in `src/types.rs`.
 ## Transport Functions
 
 ### `transport::command`
+
 - `send_queued_command(conn, cmd)`
 
 ### `transport::realtime`
+
 - `send_serial_realtime(...)`
 - `send_telnet_realtime(...)`
 
 ### `transport::serial`
+
 - `spawn_serial_reader(...)`
 - `spawn_serial_writer(...)`
 
 ### `transport::tcp`
+
 - `spawn_tcp_reader(...)`
 - `spawn_tcp_writer(...)`
 
@@ -104,10 +114,12 @@ Defined in `src/types.rs`.
 ## Error Model
 
 - Public APIs primarily return `Result<_, String>`.
-- Worker spawn functions generally do not return errors directly; failures are handled in worker loops and reflected through status/events.
+- Worker spawn functions generally do not return errors directly; failures are
+    handled in worker loops and reflected through status/events.
 
 ## Validation Status
 
 This API set is currently validated in workspace with:
+
 - `cargo test`
 - `cargo doc --no-deps`
